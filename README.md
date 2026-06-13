@@ -27,7 +27,7 @@
 ```text
 ├── src/main/java
 │   ├── AI/                   # mock AI
-│   ├── Controller/           # Entry Point 지
+│   ├── Controller/           # Entry Point 
 │   ├── DTO/                  # 데이터 담는 객체
 │   ├── Repository/           # DB에서 저장하거나 불러오는 기능 구현 
 │   └── Services/             # 비지니스 로직 구현
