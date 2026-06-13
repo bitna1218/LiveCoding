@@ -10,8 +10,11 @@
 
 ## Data Flow
 1. **save**
+
 측정시작 -> controller -> serviceImpl -> repository -> 임시 메모리
+
 2. **analyze**
+
 측정 종료 -> 임시 메모리 -> repository -> serviceImpl -> AI -> serviceImpl -> controller -> 결과화면
 
 ---
