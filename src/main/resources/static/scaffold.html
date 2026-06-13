@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>라이브 코딩 과제</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    #preview { width: 100%; background: #111; border-radius: 8px; aspect-ratio: 4/3; }
+    button { padding: 10px 20px; font-size: 15px; margin: 12px 0; cursor: pointer; }
+    #log { background: #f4f4f4; border-radius: 8px; padding: 12px; height: 200px; overflow-y: auto;
+           font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+    .hint { color: #888; font-size: 13px; }
+	
+	#loading {
+	  position: fixed;
+	  top: 0;
+	  left: 0;
+	  width: 100%;
+	  height: 100%;
+
+	  display: flex;
+	  flex-direction: column;
+	  justify-content: center;
+	  align-items: center;
+
+	  background-color: rgba(0, 0, 0, 0.5);
+	  z-index: 9999;
+	}
+
+	.hidden {
+	  display: none !important;
+	}
+	
+	.spinner {
+	  width: 40px;
+	  height: 40px;
+	  border: 4px solid #ddd;
+	  border-top: 4px solid #007bff;
+	  border-radius: 50%;
+	  animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+	  from { transform: rotate(0deg); }
+	  to { transform: rotate(360deg); }
+	}
+  </style>
+</head>
+<body>
+  <h2>라이브코딩 과제</h2>
+  <p class="hint">웹캠으로 획득하는 영상 및 관절 위치 정보를 서버로 전달하여 처리합니다</p>
+
+  <video id="preview" autoplay playsinline muted style="display:none;"></video>
+  <canvas id="canvas" style="width: 100%; background: #111; border-radius: 8px; aspect-ratio: 4/3;"></canvas>
+  <button id="startBtn">측정 시작</button>
+  <button id="stopBtn" disabled>측정 종료</button>
+
+  <div id="log"></div>
+  
+  <div id="loading" class="hidden">
+    <div class="spinner"></div>
+    <p style="color: #fff;">AI가 자세를 분석 중입니다...(10초 걸림)</p>
+  </div>
+
+  <script>
+    // ───────────────────────────────────────────────
+    // ② 웹캠/측정 골격 (완성 — 수정·이해 불필요. 블랙박스로 취급하세요)
+    //    이 블록은 그대로 둡니다. 내부 동작을 분석할 필요 없습니다.
+    //    알아야 할 것은 단 하나:
+    //      - onResults(results) 콜백이 호출되며,
+    //        results.poseLandmarks 에 관절 위치 데이터가 들어옵니다.
+    //    이 데이터를 가지고 무엇을 할지가 당신의 과제입니다. (아래 onResults 참고)
+    // ───────────────────────────────────────────────
+    let holistic = null;
+    let camera = null;
+    let videoElement = null;
+    let canvasElement = null;
+    let canvasCtx = null;
+	
+	//결과값을 담는 buffer
+	let landmarkBuffer = [];
+
+    async function startCapture() {
+      videoElement = document.querySelector('#preview');
+      canvasElement = document.querySelector('#canvas');
+      canvasCtx = canvasElement.getContext('2d');
+
+      // Canvas 해상도 설정
+      canvasElement.width = 640;
+      canvasElement.height = 480;
+
+      // MediaPipe Holistic 초기화
+      holistic = new Holistic({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
+      });
+
+      holistic.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        smoothSegmentation: false,
+        refineFaceLandmarks: false,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      holistic.onResults(onResults);
+
+      try {
+        camera = new Camera(videoElement, {
+          onFrame: async () => {
+            await holistic.send({ image: videoElement });
+          },
+          width: 640,
+          height: 480
+        });
+        await camera.start();
+        log('웹캠과 MediaPipe Holistic이 시작되었습니다.');
+      } catch (e) {
+        log('카메라를 사용할 수 없습니다: ' + e.message);
+      }
+    }
+
+    function onResults(results) {
+      // Canvas에 영상과 포즈 스켈레톤 그리기
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+      }
+
+      canvasCtx.restore();
+	  
+	  if (!results.poseLandmarks) {
+	    return;
+	  }
+	  
+
+	  //결과값 buffer에 저장
+	   bufferSave(results)
+
+      // ───────────────────────────────────────────────
+      //  ★ 여기서부터가 과제입니다.
+      //
+      //  [주어진 사실]
+      //   - results.poseLandmarks : 관절 위치 배열
+      //       33개 관절, 각 항목 = { x, y, z, visibility }
+      //   - 이 onResults 콜백은 카메라 프레임마다 호출됩니다 (초당 약 30회).
+      //   - 관절을 사람이 안 잡히면 results.poseLandmarks 는 비어 있을 수 있습니다.
+      //
+      //  [요구사항: 요구규격 문서의 RQ / PC / EX 를 충족하도록 설계하세요]
+      //   - 이 데이터를 서버로 보낼지, 보낸다면 언제·얼마나·어떤 형태로 보낼지
+      //     전적으로 당신이 판단합니다. (전송 함수는 아래 ③ 참고)
+      // ───────────────────────────────────────────────
+    }
+
+
+    function stopCapture() {
+      if (camera) {
+        camera.stop();
+        camera = null;
+      }
+      if (holistic) {
+        holistic.close();
+        holistic = null;
+      }
+    }
+
+    // ───────────────────────────────────────────────
+    // ③ 전송 호출부 (골격 — 필요하면 보완하세요)
+    //    측정값을 서버로 보냅니다.
+    // ───────────────────────────────────────────────
+	async function sendSegment(data) {
+	  try {
+	    const response = await fetch('/segments', { 
+	      method: 'POST',
+	      headers: {
+	        'Content-Type': 'application/json'
+	      }, 
+	      body: JSON.stringify(data) 
+	    });
+
+
+	    if (!response.ok) {
+	      throw new Error(`서버 에러 발생: ${response.status}`);
+	    }
+	    const result = await response.json(); 
+	    
+	  } catch (error) {
+	    console.error('데이터 전송 중 에러 발생:', error);
+
+	  }
+	}
+
+    // ───────────────────────────────────────────────
+    // 화면 연결
+    // ───────────────────────────────────────────────
+    const startBtn = document.querySelector('#startBtn');
+    const stopBtn = document.querySelector('#stopBtn');
+	
+	let intervalId;
+
+    startBtn.addEventListener('click', () => {
+      
+	  startCapture();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      log('측정을 시작했습니다.');
+	 
+	  //서버에 저장된 버퍼 보내기
+	  sendStartMsg();
+	  
+    });
+
+    stopBtn.addEventListener('click', () => {
+      stopCapture();
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      log('측정을 종료했습니다.');
+	  
+	  //서버에 endSign 보내기
+	  sendEndSign();
+	  
+    });
+
+    function log(msg) {
+      const el = document.querySelector('#log');
+      el.textContent += '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+	
+	//buffer 결과값 저장 함수
+	function bufferSave(results){
+
+		  landmarkBuffer.push({
+		    timestamp: Date.now(),
+		    poseLandmarks: results.poseLandmarks
+		  });
+	}
+	
+	//정해진 시간마다 서버에 buffer 전달
+	function sendStartMsg() {
+	  intervalId = setInterval(() => {
+	    sendSegment(landmarkBuffer);
+	    landmarkBuffer = [];    
+	  }, 1000);
+	}
+	
+	//측정종료 버튼 누를때 
+	function sendEndSign(){
+		
+		//버퍼 보내기 클리어
+		clearInterval(intervalId);
+		//서버에 종료메세지 전달
+		sendSegmentEnd();
+
+	}
+	
+	// 서버에 종료 메세지 보내기
+	async function sendSegmentEnd() {
+	  try {
+	    const response = await fetch('/segments/end', {
+	      method: 'POST'
+	    });
+
+	    if (!response.ok) {
+	      throw new Error(`서버 응답 에러 (상태코드: ${response.status})`);
+	    }
+
+	    const data = await response.json();
+
+	    if (data.status === 'ANALYZING') {
+	      startPolling();
+	      showLoading();
+	    } else if (data.status === 'FAILED') {
+	      alert('분석 요청에 실패했습니다. 다시 시도해주세요.');
+	    }
+	    
+	  } catch (error) {
+
+	    console.error('요청 중 예외 발생:', error);
+	    alert('서버와 통신 중 오류가 발생했습니다.');
+
+	  }
+	}
+
+	//상태에따른 로딩스피너 on/off
+	function showLoading() {
+	  document.getElementById('loading').classList.remove('hidden');
+	}
+
+	function hideLoading() {
+	  document.getElementById('loading').classList.add('hidden');
+	}
+	
+	//1초 마다 분석결과 나왔는지 확인하는 곳
+	function startPolling() {
+	  const interval = setInterval(async () => {
+	    try {
+	      const response = await fetch('/segments/status', {
+	        method: 'GET'
+	      });
+
+	      if (!response.ok) {
+	        throw new Error(`서버 응답 에러 (상태코드: ${response.status})`);
+	      }
+
+	      const data = await response.json();
+	      console.log('폴링 상태 데이터:', data);
+
+	      if (data.status === 'COMPLETED') {
+	        clearInterval(interval);
+	        hideLoading();
+	        alert('분석이 완료되었습니다.');
+	        window.location.replace('/result');
+	      }
+
+
+	      if (data.status === 'FAILED') {
+	        clearInterval(interval);
+	        hideLoading();
+	        alert('분석에 실패했습니다.');
+	      }
+	      
+	    } catch (error) {
+	      console.error('폴링 중 에러 발생:', error);
+	      
+	      clearInterval(interval);
+	      hideLoading();
+	      alert('상태를 확인하는 중 서버와 통신이 끊어졌습니다. 잠시 후 다시 시도해주세요.');
+	    }
+	  }, 1000);
+	}
+	
+	
+  </script>
+</body>
+</html>

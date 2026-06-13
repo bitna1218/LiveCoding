@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <title>결과페이지</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  </style>
+</head>
+<body>
+  <h2>결과페이지</h2>
+  <table border="1">
+      <thead>
+          <tr>
+              <th>exerciseVideoId</th>
+              <th>exerciseTitle</th>
+              <th>videoServerPath</th>
+              <th>inferenceResult</th>
+			  <th>inferredAt</th>
+          </tr>
+      </thead>
+      <tbody>
+          <tr th:each="item : ${result}">
+              <td th:text="${item.exerciseVideoId}"></td>
+              <td th:text="${item.exerciseTitle}"></td>
+              <td th:text="${item.videoServerPath}"></td>
+			  <td>
+			      <details>
+			          <summary>보기</summary>
+			          <pre th:text="${item.inferenceResult}"></pre>
+			      </details>
+			  </td>
+              <td th:text="${item.inferredAt}"></td>
+          </tr>
+      </tbody>
+  </table>
+
+  <script>
+  </script>
+</body>
+</html>
