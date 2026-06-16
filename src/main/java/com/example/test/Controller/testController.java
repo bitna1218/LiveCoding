@@ -1,18 +1,23 @@
 package com.example.test.Controller;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.ui.Model;
 
 import com.example.test.DTO.SegmentDto;
+import com.example.test.DTO.VideoDto;
 import com.example.test.Service.testService;
 
 
@@ -39,6 +44,16 @@ public class testController {
 		
         return "resultPage"; 
     }
+	
+	@GetMapping("/video")
+	public ResponseEntity<byte[]> getVideo() throws IOException {
+
+		VideoDto file = service.readVideo().get(0);
+
+	    return ResponseEntity.ok()
+	            .contentType(MediaType.parseMediaType("video/webm"))
+	            .body(file.getData());
+	}
 
 
 	@PostMapping("/segments")
@@ -91,5 +106,13 @@ public class testController {
 	                .body(Map.of("status", "FAILED", "error", e.getMessage()));
 	    }
 	}
+	
+	
+	@PostMapping("/upload")
+	@ResponseBody
+	public void upload(@RequestParam("file") MultipartFile file) throws IOException {
+	    service.uploadRecording(file);
+	}
+	
 	
 }

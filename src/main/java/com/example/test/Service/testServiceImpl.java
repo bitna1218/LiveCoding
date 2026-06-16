@@ -8,9 +8,11 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.example.test.AI.AnalyzeAssessment;
 import com.example.test.DTO.SegmentDto;
+import com.example.test.DTO.VideoDto;
 import com.example.test.Repository.testRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -93,6 +95,32 @@ public class testServiceImpl implements testService{
 		    }
 	       
 	}
+
+	@Override
+	public void uploadRecording(MultipartFile file) throws IOException {
+		VideoDto video = new VideoDto(
+				file.getOriginalFilename(),
+				file.getBytes()
+				); 
+		
+		repo.saveRecording(video);
+		
+	}
+
+
+	@Override
+	public List<VideoDto> readVideo() {
+		return repo.findVideo();
+	}
+
+
+
+
+
+
+
+
+
 
 
 

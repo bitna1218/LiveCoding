@@ -83,6 +83,9 @@
 	
 	//결과값을 담는 buffer
 	let landmarkBuffer = [];
+	//비디오 녹화
+	let recorder;
+	let chunks = [];
 
     async function startCapture() {
       videoElement = document.querySelector('#preview');
@@ -119,6 +122,13 @@
           height: 480
         });
         await camera.start();
+		
+		///////////////
+		console.log("카메라시작");
+		const stream = videoElement.srcObject;
+		startRecording(stream);
+		////////////////
+		
         log('웹캠과 MediaPipe Holistic이 시작되었습니다.');
       } catch (e) {
         log('카메라를 사용할 수 없습니다: ' + e.message);
@@ -227,6 +237,7 @@
 	  
 	  //서버에 endSign 보내기
 	  sendEndSign();
+	  stopRecording();
 	  
     });
 
@@ -339,6 +350,51 @@
 	  }, 1000);
 	}
 	
+	function startRecording(stream) {
+		
+		console.log("startRecording 들어옴");
+		
+		recorder = new MediaRecorder(stream);
+		
+		chunks = [];
+		
+		recorder.ondataavailable = (e) => {
+		  chunks.push(e.data);
+		};
+		
+		recorder.start();
+
+	}
+	
+	function stopRecording() {
+		recorder.stop();
+		
+		recorder.onstop = () => {
+		  const blob = new Blob(chunks, {
+		    type: 'video/webm'
+		  });
+		  
+		  sendRecodingData(blob)
+		  
+		}	
+		
+	}
+	
+	
+	function sendRecodingData(blob){
+		console.log("보낼녹화데이터"+blob);
+		console.log(blob.size / 1024 / 1024);
+		
+		const formData = new FormData();
+
+		formData.append("file", blob, "video.webm");
+
+		fetch("/upload", {
+		  method: "POST",
+		  body: formData
+		});
+		
+	}
 	
   </script>
 </body>
